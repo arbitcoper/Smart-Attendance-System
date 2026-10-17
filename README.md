@@ -12,7 +12,7 @@ A smart attendance system using ESP32 and BLE technology to track student attend
 7. [Usage](#usage)
 
 ## Overview
-The system automatically tracks student attendance by detecting their Bluetooth devices. Students are marked present only if they are detected for at least 80% of the class duration. The system uses an RTC module for accurate timekeeping and Firebase for real-time data storage.
+The system automatically tracks student attendance by detecting their Bluetooth devices. Students are marked present only if they are detected for at least 80% of the class duration (verified via active BLE scan detection counts). The system uses an RTC module for accurate offline timekeeping and Firebase for real-time data storage.
 
 ## Hardware Requirements
 1. **ESP32 Development Board**
@@ -83,6 +83,10 @@ const int scan_time = 1;        // 1 second scan duration
 const int scan_interval = 5;    // 5 seconds between scans
 const int stud_cnt = 4;         // Number of students
 
+// Scan tracking
+unsigned int total_scans = 0;                // Total scans conducted during lecture
+unsigned int spotted_counts[stud_cnt] = {0}; // Number of scans each student was detected in
+
 // Student structure
 struct Student {
   String name;
@@ -135,15 +139,17 @@ void loop() {
 
   // Perform BLE scan every scan_interval seconds
   if (current_time - last_scan_time >= scan_interval) {
+    // Increment total_scans
     // Scan for devices
     // Match UUIDs with student list
-    // Record timestamps
+    // Increment spotted_counts for detected students
   }
 
   // Mark attendance when class ends
   if (class_over) {
-    // Calculate duration for each student
-    // Update Firebase with attendance status
+    // Calculate required scans: 0.8 * total_scans
+    // Mark present if spotted_counts >= required_scans
+    // Update Firebase with attendance status (1 or 0)
     // Update statistics (attended, total, percentage)
   }
 }
@@ -201,11 +207,12 @@ Batch27/
 
 3. **During Class**
    - System scans for student devices every 5 seconds
-   - Entry and exit times are recorded
+   - Each detection increments the student's active presence scan counter
    - Real-time updates in Serial Monitor
 
 4. **After Class**
-   - Attendance marked automatically after duration
+   - Attendance marked automatically after lecture duration
+   - Compares active scan counts against the 80% threshold
    - Results uploaded to Firebase
    - Statistics updated (attended, total, percentage)
 
@@ -222,11 +229,11 @@ Batch27/
    - UUID must match exactly
 
 3. **Attendance Criteria**
-   - Present if detected for ≥80% of class duration
-   - Continuous tracking every 5 seconds
-   - Both entry and exit times recorded
+   - Present if detected in ≥80% of conducted BLE scans (`spotted_counts >= 0.8 * total_scans`)
+   - Continuous presence sampling every 5 seconds
+   - Eliminates proxy attendance and mid-lecture disappearances
 
 4. **Firebase Updates**
    - Real-time attendance status
    - Individual lecture records
-   - Running statistics maintained 
+   - Running statistics maintained

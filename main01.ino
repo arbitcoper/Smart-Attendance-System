@@ -73,6 +73,8 @@ String time_to_string(unsigned long timestamp) {
 BLEScan* pBLEScan;
 unsigned long entry_timestamps[stud_cnt] = {0};
 unsigned long last_seen_timestamps[stud_cnt] = {0};
+unsigned int spotted_counts[stud_cnt] = {0}; // Number of scans each student was detected in
+unsigned int total_scans = 0;                // Total scans conducted during lecture
 
 void setup() {
   Serial.begin(115200);
@@ -225,6 +227,7 @@ void loop() {
   if (current_time - last_scan_time >= scan_interval) {
     BLEScanResults found_devices = *pBLEScan->start(scan_time, false);
     last_scan_time = current_time;
+    total_scans++;
 
     // Reset presence flags for this scan
     bool present_in_this_scan[stud_cnt] = {false};
@@ -247,11 +250,10 @@ void loop() {
       }
     }
 
-    // Update duration for students present in this scan
+    // Update spotted count for students present in this scan
     for (int j = 0; j < stud_cnt; j++) {
-      if (present_in_this_scan[j] && entry_timestamps[j] != 0) {
-        // Add scan_interval seconds to their duration
-        last_seen_timestamps[j] = current_time;
+      if (present_in_this_scan[j]) {
+        spotted_counts[j]++;
       }
     }
 
@@ -262,6 +264,12 @@ void loop() {
   if (!attendance_marked && (current_time - class_start_time >= class_duration)) {
     attendance_marked = true;
     Serial.printf("🛑 Class ended. Marking attendance for %s, Lecture %d on %s...\n", course_code.c_str(), lec_num, lec_date.c_str());
+    Serial.printf("📊 Total scans conducted: %u\n", total_scans);
+
+    // Calculate required scan count for 80% attendance
+    unsigned int required_scans = (total_scans > 0) ? (unsigned int)(0.8 * total_scans) : (unsigned int)(req_duration / scan_interval);
+    if (required_scans == 0 && total_scans > 0) required_scans = 1;
+    Serial.printf("🎯 Required scans for present (80%%): %u\n", required_scans);
 
     String lecture_key = get_lecture_key(lec_num, lec_date);
 
@@ -269,23 +277,18 @@ void loop() {
       String base_path = "/Batch27/" + course_code + "/" + students[i].roll;
       String lec_path = base_path + "/" + lecture_key;
 
-      unsigned long duration = 0;
+      unsigned long active_duration = (unsigned long)spotted_counts[i] * scan_interval;
       int status = 0;
 
-      if (entry_timestamps[i] != 0) {
-        duration = last_seen_timestamps[i] - entry_timestamps[i];
-        if (duration >= req_duration) status = 1;
-        
-        // Add error handling for Firebase operations
-        if (!Firebase.RTDB.setInt(&fbdo, lec_path, status)) {
-          Serial.printf("❌ Failed to set attendance for %s\n", students[i].roll.c_str());
-          continue;
-        }
-      } else {
-        if (!Firebase.RTDB.setInt(&fbdo, lec_path, 0)) {
-          Serial.printf("❌ Failed to set attendance for %s\n", students[i].roll.c_str());
-          continue;
-        }
+      // Mark present only if spotted count meets or exceeds 80% of total scans
+      if (spotted_counts[i] >= required_scans && spotted_counts[i] > 0) {
+        status = 1;
+      }
+
+      // Record attendance status to Firebase
+      if (!Firebase.RTDB.setInt(&fbdo, lec_path, status)) {
+        Serial.printf("❌ Failed to set attendance for %s\n", students[i].roll.c_str());
+        continue;
       }
 
       // Update attendance stats with error handling
@@ -308,7 +311,13 @@ void loop() {
         }
       }
 
-      Serial.printf("📤 %s: %s (%lu secs) for %s\n", students[i].roll.c_str(), status ? "Present" : "Absent", duration, lecture_key.c_str());
+      Serial.printf("📤 %s: %s (spotted %u/%u scans, ~%lu secs) for %s\n", 
+                    students[i].roll.c_str(), 
+                    status ? "Present" : "Absent", 
+                    spotted_counts[i], 
+                    total_scans, 
+                    active_duration, 
+                    lecture_key.c_str());
     }
     Serial.printf("✅ Attendance upload complete for %s, Lecture %d on %s.\n", course_code.c_str(), lec_num, lec_date.c_str());
     while (true);     // stops after marking attendance for this lecture

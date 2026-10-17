@@ -25,7 +25,7 @@ The Duration-based Smart Attendance System (DSAS) is an automated attendance tra
   - Provide real-time attendance tracking and reporting
 
 ## Innovation/Uniqueness
-- **Duration-Based Tracking**: Students are marked present only if they are detected for at least 80% of the class duration
+- **Duration-Based Tracking**: Students are marked present only if they are detected for at least 80% of the class duration (verified via active BLE scan detection counts)
 - **Real-Time Monitoring**: System scans every 5 seconds to verify continuous presence
 - **Offline Time Accuracy**: RTC module ensures accurate timekeeping independent of network connectivity
 - **Firebase Integration**: Real-time attendance data storage and retrieval
@@ -49,19 +49,21 @@ The Duration-based Smart Attendance System (DSAS) is an automated attendance tra
 
 2. **Class Setup**:
    - Instructor inputs course code, lecture number, and duration
-   - System starts tracking time
+   - System starts tracking time and resets scan counters
 
 3. **Attendance Tracking**:
    - BLE scans every 5 seconds
    - Detects student devices using UUID
-   - Records entry and last seen timestamps
-   - Updates Firebase in real-time
+   - Records entry and last-seen timestamps
+   - Increments an active presence scan counter (`spotted_counts`) for each positive detection
+   - Tracks total conducted scans (`total_scans`)
 
 4. **Attendance Marking**:
    - After class duration ends
-   - Calculates presence duration for each student
-   - Marks attendance based on 80% threshold
-   - Updates attendance statistics
+   - Evaluates active presence: compares student spotted count against 80% of total conducted scans (`spotted_counts >= 0.8 * total_scans`)
+   - Eliminates vulnerabilities where students leave mid-lecture
+   - Updates Firebase in real-time with attendance status
+   - Updates running attendance statistics
 
 ## Circuit Diagram
 ```
@@ -78,12 +80,12 @@ The system uses several key components:
 1. **RTC Time Management**:
    - Automatic time setting from system
    - Accurate timestamp recording
-   - Duration calculation
+   - Independent offline duration tracking
 
 2. **BLE Scanning**:
    - 5-second scan intervals
    - UUID-based student identification
-   - Continuous presence tracking
+   - Continuous presence sampling
 
 3. **Firebase Integration**:
    - Real-time database updates
@@ -92,8 +94,8 @@ The system uses several key components:
 
 4. **Attendance Logic**:
    - Entry time recording
-   - Duration calculation
-   - 80% presence threshold
+   - Active presence counter per scan cycle
+   - 80% scan threshold verification
    - Automatic status updates
 
 ## Project Outcome
@@ -101,17 +103,18 @@ The system uses several key components:
   - Accurate BLE device detection
   - Reliable time tracking
   - Real-time Firebase updates
-  - Duration-based attendance marking
+  - Active duration-based attendance marking
 
 - **Technical Specifications**:
   - BLE detection range: ~10 meters
   - Scan interval: 5 seconds
-  - Minimum attendance duration: 80% of class time
+  - Minimum attendance duration: 80% of class time (active scan counts)
   - Real-time data updates
 
 - **Challenges Overcome**:
   - BLE signal stability
   - RTC time synchronization
+  - Mid-lecture absence detection via scan count accumulation
   - Firebase connection management
   - Memory optimization
 
